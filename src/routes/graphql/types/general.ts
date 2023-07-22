@@ -8,3 +8,7 @@ export interface IPrisma {
   prisma: PrismaClient;
 }
 
+export interface ISubscription {
+  userId: string;
+  authorId: string;
+}
