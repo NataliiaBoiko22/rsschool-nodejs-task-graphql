@@ -11,7 +11,7 @@ import {
     import { IId, IPrisma } from './general.js';
     import { MemberTypeId } from '../../member-types/schemas.js';
   import { userType } from './user.js';
-
+import { IDataLoaders } from '../loadersHandler.js';
 export type IProfileInput = {
   isMale: boolean;
   yearOfBirth: number;
@@ -29,16 +29,17 @@ export interface IProfile extends IId, IProfileInput {}
       memberTypeId: { type: memberTypeIdEnum },
       user: {
         type: userType,
-        resolve: async (source: IProfile, __: unknown, { prisma }: IPrisma) => {
+        resolve: async (source: IProfile, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) => {
           const { userId } = source;
-          return prisma.user.findUnique({ where: { id: userId } });
+          return dataLoaders.userLoader.load(userId);
         },
       },
       memberType: {
         type: new GraphQLNonNull(memberType),
-        resolve: async (source: IProfile, __: unknown, { prisma }: IPrisma) => {
+        resolve: async (source: IProfile, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) => {
           const { memberTypeId } = source;
-          return prisma.memberType.findUnique({ where: { id: memberTypeId } });
+          return dataLoaders.memberTypeLoader.load(memberTypeId);
+
         },
       },
     }),

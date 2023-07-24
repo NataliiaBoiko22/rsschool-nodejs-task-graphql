@@ -5,7 +5,8 @@ import {
   GraphQLObjectType,
   GraphQLSchema,
   GraphQLBoolean,
-  GraphQLString
+  GraphQLString,
+  GraphQLResolveInfo
 } from 'graphql';
 import { UUIDType } from './types/uuid.js';
 import { userType } from './types/user.js';
@@ -16,11 +17,17 @@ import { createUserInputType, changeUserInputType } from './types/user.js';
 import { createProfileInputType, changeProfileInputType } from './types/profile.js';
 import { createPostInputType, changePostInputType } from './types/post.js';
 import { IMemberType } from './types/member.js';
-import { IId, IPrisma } from './types/general.js';
-import { IUserInput } from './types/user.js';
+import { IId, IPrisma, IPrismaPlusLoaders } from './types/general.js';
+import { IUserInput } from './types/general.js';
 import { IPostInput } from './types/post.js';
 import { IProfile, IProfileInput } from './types/profile.js';
-import { ISubscription } from './types/general.js';
+import { ISubscriptionUpdate } from './types/general.js';
+import { User } from './types/general.js';
+import {
+  parseResolveInfo,
+  ResolveTree,
+  simplifyParsedResolveInfoFragmentWithType,
+} from 'graphql-parse-resolve-info';
 
 const query = new GraphQLObjectType({
   name: 'Query',
@@ -39,10 +46,30 @@ const query = new GraphQLObjectType({
         return posts;
       }
     },
+
     users: {
       type: new GraphQLList(userType),
-      resolve: async (_: unknown, __: unknown, { prisma }: IPrisma) => {
-        const users = await prisma.user.findMany();
+      resolve: async (
+        __: unknown, _: unknown,
+        { prisma, dataLoaders }: IPrismaPlusLoaders,
+        info: GraphQLResolveInfo,
+      ) => {
+        const parsedInfo = parseResolveInfo(info) as ResolveTree;
+  
+        const { fields } = simplifyParsedResolveInfoFragmentWithType(
+          parsedInfo,
+          info.returnType,
+        );
+        const userSubscribedTo = 'userSubscribedTo' in fields;
+        const subscribedToUser = 'subscribedToUser' in fields;
+        const users = await prisma.user.findMany({
+          include: { userSubscribedTo, subscribedToUser },
+        });
+  
+        users.forEach((user) => {
+          dataLoaders.userLoader.prime(user.id, user);
+        });
+  
         return users;
       },
     },
@@ -81,11 +108,8 @@ const query = new GraphQLObjectType({
       args: {
         id: { type: new GraphQLNonNull(UUIDType) },
       },
-      resolve: async (_: unknown, args: { id: string }, { prisma }: IPrisma) => {
-        const { id } = args;
-        const user = await prisma.user.findUnique({ where: { id } });
-        return user;
-      },
+      resolve: async (_, { id }: User, { dataLoaders }: IPrismaPlusLoaders) =>
+      await dataLoaders.userLoader.load(id),
     },
     profile: {
       type: profileType,
@@ -210,21 +234,24 @@ fields: {
           userId: { type: new GraphQLNonNull(UUIDType) },
           authorId: { type: new GraphQLNonNull(UUIDType) },
         },
-        async resolve(_: unknown,  { userId: id, authorId }: ISubscription, { prisma }: IPrisma) {
+        async resolve(_: unknown,  { userId: id, authorId }: ISubscriptionUpdate, { prisma }: IPrisma) {
           const user = prisma.user.update({
             where: { id },
             data: { userSubscribedTo: { create: { authorId } } },
           });
+
+
           return user;
         },
       },
+
       unsubscribeFrom: {
         type: GraphQLString,
         args: {
           userId: { type: new GraphQLNonNull(UUIDType) },
           authorId: { type: new GraphQLNonNull(UUIDType) },
         },
-        async resolve(_: unknown, { userId: subscriberId, authorId }: ISubscription, { prisma }: IPrisma) {
+        async resolve(_: unknown, { userId: subscriberId, authorId }: ISubscriptionUpdate, { prisma }: IPrisma) {
           await prisma.subscribersOnAuthors.delete({
             where: { subscriberId_authorId: { subscriberId, authorId } },
         
@@ -232,6 +259,7 @@ fields: {
           return null
         },
         },
+
       },     
 });
 export const schema = new GraphQLSchema({ query, mutation});

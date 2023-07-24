@@ -8,7 +8,7 @@ import {
   import { UUIDType } from './uuid.js';
   import { IPrisma, IId} from './general.js';
   import { userType } from './user.js';
-
+import { IDataLoaders } from '../loadersHandler.js';
   export interface IPostInput {
     title: string;
     content: string;
@@ -25,10 +25,9 @@ import {
       content: { type: new GraphQLNonNull(GraphQLString) },
       author: {
         type: userType,
-        resolve: async (source: IPost, __: unknown, { prisma }: IPrisma) => {
+        resolve: async (source: IPost, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) => {
           const { authorId } = source;
-          const author = prisma.post.findUnique({ where: { id: authorId } });
-          return author;
+          return dataLoaders.userLoader.load(authorId);
         },
       },
     }),

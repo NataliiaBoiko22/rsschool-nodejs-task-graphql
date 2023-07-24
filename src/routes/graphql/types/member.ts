@@ -10,6 +10,7 @@ import { profileType } from './profile.js';
 import { MemberTypeId } from '../../member-types/schemas.js';
 
 import { IPrisma } from './general.js';
+import { IDataLoaders } from '../loadersHandler.js';
 
 export interface IMemberType {
   id: MemberTypeId;
@@ -37,9 +38,9 @@ export const memberType = new GraphQLObjectType({
     postsLimitPerMonth: { type: new GraphQLNonNull(GraphQLInt) },
     profiles: {
       type: new GraphQLList(profileType),
-      resolve: async (source: IMemberType, __: unknown, { prisma }: IPrisma) => {
+      resolve: async (source: IMemberType, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) => {
         const { id } = source;
-        const member = await prisma.profile.findMany({ where: { memberTypeId: id } });
+        const member = await dataLoaders.profilesByMemberTypeLoader.load(id); 
         return member;
       },
     },

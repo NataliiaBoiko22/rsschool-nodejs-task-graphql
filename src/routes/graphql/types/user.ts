@@ -9,14 +9,11 @@ import {
   import { UUIDType } from './uuid.js';
  import { profileType } from './profile.js';
 import { postType } from './post.js';
-import { IPrisma } from './general.js';
-import { IId } from './general.js';
-export interface IUserInput {
-  name: string;
-  balance: number;
-}
-export interface IUser extends IId, IUserInput {}
-  export const userType = new GraphQLObjectType({
+import { IPrisma, IPrismaPlusLoaders } from './general.js';
+import { IDataLoaders } from '../loadersHandler.js';
+import { User } from './general.js';
+
+export const userType = new GraphQLObjectType({
     name: 'User',
     fields: () => ({
       id: { type: (UUIDType) },
@@ -24,54 +21,54 @@ export interface IUser extends IId, IUserInput {}
       balance: { type: new GraphQLNonNull(GraphQLFloat) },
     profile: {
       type: profileType as GraphQLObjectType,
-      resolve: async (source: IUser, __: unknown, { prisma }: IPrisma) =>
+      resolve: async (source: User, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) =>
       {
         const { id } = source;
-        const profile = await prisma.profile.findUnique({ where: { userId: id } })
+        const profile = await dataLoaders.profileByIdLoader.load(id);
         return profile;
       },
     },
     posts: {
       type: new GraphQLList(postType),
-      resolve: async (source: IUser, __: unknown, { prisma }: IPrisma) =>
+      resolve: async (source: User, __: unknown, { dataLoaders }: IPrisma & { dataLoaders: IDataLoaders }) =>
+
        {
         const { id } = source;
-  const posts = await prisma.post.findMany({ where: { authorId: id } });
-  return posts;
+  const posts = await dataLoaders.postsByIdLoader.load(id);
+        return posts;
 }
     },
-      userSubscribedTo: {type: new GraphQLList(userType),
-    async resolve(source: IUser, __: unknown, { prisma }: IPrisma) {
-      const { id } = source;
-      const indexes = await prisma.subscribersOnAuthors.findMany({
-        
-        where: { subscriberId: id },
-      });
+    
+    userSubscribedTo: {
+      type: new GraphQLList(userType),
+      resolve: async (
+        { userSubscribedTo }: User,
+        _args,
+        { dataLoaders }: IPrismaPlusLoaders,
+      ) => {
+        if (Array.isArray(userSubscribedTo) && userSubscribedTo.length > 0) {
+          return dataLoaders.userLoader.loadMany(userSubscribedTo.map(({ authorId }) => authorId));
+        }
 
-      return await prisma.user.findMany({
-        where: {
-          id: {
-            in: indexes.map((user) => user.authorId),
-          },
-        },
-      });
-    }
+        return null;
+      },
     },
-    subscribedToUser: {type: new GraphQLList(userType),
-    async resolve(source: IUser, __: unknown, { prisma }: IPrisma) {
-      const { id } = source;
-      const indexes =  await prisma.subscribersOnAuthors.findMany({
-        where: { authorId: id },
-      });
 
-      return await prisma.user.findMany({
-        where: {
-          id: {
-            in: indexes.map((user) => user.subscriberId), 
-          },
-        },
-      });
-    }},
+    subscribedToUser: {
+      type: new GraphQLList(userType),
+      resolve: async (
+        { subscribedToUser }: User,
+        _args,
+        { dataLoaders }: IPrismaPlusLoaders,
+      ) => {
+        if (Array.isArray(subscribedToUser) && subscribedToUser.length > 0) {
+          return dataLoaders.userLoader.loadMany(
+            subscribedToUser.map(({ subscriberId }) => subscriberId),
+          );
+        }
+
+        return null;
+      },}
   })
 });
 
