@@ -1,5 +1,7 @@
 import { Type } from '@fastify/type-provider-typebox';
 
+
+
 export const gqlResponseSchema = Type.Partial(
   Type.Object({
     data: Type.Any(),
@@ -18,3 +20,4 @@ export const createGqlResponseSchema = {
     },
   ),
 };
+
